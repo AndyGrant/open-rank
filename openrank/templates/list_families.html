@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Families</title>
+</head>
+<body>
+    <ul>
+    {% for family in families %}
+        <li><a href='/family/edit/{{family.pk}}/'>{{family.name}}</a></li>
+    {% endfor %}
+    </ul>
+</body>
+</html>

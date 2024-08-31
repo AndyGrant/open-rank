@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Engines</title>
+</head>
+<body>
+    <ul>
+    {% for engine in engines %}
+        <li><a href='/engine/edit/{{engine.pk}}/'>{{engine.name}}</a></li>
+    {% endfor %}
+    </ul>
+</body>
+</html>
