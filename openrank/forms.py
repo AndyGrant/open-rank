@@ -49,8 +49,16 @@ class EngineForm(forms.ModelForm):
             self.fields['classification'].initial = EngineClassification.OPENSOURCE
 
     def clean(self):
-        data = super().clean()
-        if not data.get('binary'):
-            print ('Ruhroh')
-            raise forms.ValidationError('A static linux-avx2-popcnt binary must be provided')
-        return data
+
+        with transaction.atomic():
+
+            # Ensure that we always have a binary file associated with an engine
+            data = super().clean()
+            if not data.get('binary'):
+                raise forms.ValidationError('A static linux-avx2-popcnt binary must be provided')
+
+            # Ensure only one engine in a family is marked as being most-recent
+            Engine.objects.filter(family=data.get('family')).update(most_recent=False)
+            self.instance.most_recent = True
+
+            return data

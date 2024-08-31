@@ -32,6 +32,7 @@ class Engine(Model):
     name           = CharField(max_length=128)
     family         = ForeignKey(EngineFamily, on_delete=CASCADE)
     release_date   = DateField()
+    most_recent    = BooleanField(default=False)
     hardware       = CharField(max_length=32, choices=EngineHardwareType.choices)
     classification = CharField(max_length=32, choices=EngineClassification.choices)
     binary         = FileField(upload_to=engine_file_name, blank=True, null=True)
