@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pairings</title>
+</head>
+<body>
+    <ul>
+    {% for pairing in pairings %}
+        <li><a href='/pairings/{{pairing.rating_list.pk}}/edit/{{pairing.pk}}/'>
+            {{pairing.engine1.name}} vs {{pairing.engine2.name}}
+        </a></li>
+    {% endfor %}
+    </ul>
+</body>
+</html>

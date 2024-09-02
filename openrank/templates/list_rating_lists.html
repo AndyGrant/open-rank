@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Rating Lists</title>
+</head>
+<body>
+    <table>
+    {% for list in lists %}
+        <tr>
+            <td><a href='/rating-list/edit/{{list.pk}}/'>{{list.name}}</a></td>
+            <td><a href='/pairings/{{list.pk}}/list/'>View-Pairings</a></td>
+            <td><a href='/pairings/{{list.pk}}/generate/primary'>Generate-Pairings</a></td>
+        </tr>
+    {% endfor %}
+    </table>
+</body>
+</html>

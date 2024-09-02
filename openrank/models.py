@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import *
 
 import os
@@ -68,3 +69,32 @@ class Engine(Model):
         with transaction.atomic():
             check_unique_fields(Engine, self, 'name')
             super().save(*args, **kwargs)
+
+class RatingList(Model):
+
+    name            = CharField(max_length=128)
+    time_control    = CharField(max_length=128)
+    hash_settings   = IntegerField()
+    thread_settings = IntegerField()
+
+    def __str__(self):
+        return '%s (%s)' % (self.name, self.time_control)
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            check_unique_fields(RatingList, self, 'name')
+            super().save(*args, **kwargs)
+
+class Pairing(Model):
+
+    rating_list = ForeignKey(RatingList, on_delete=CASCADE)
+    engine1     = ForeignKey(Engine, on_delete=CASCADE, related_name='engine1')
+    engine2     = ForeignKey(Engine, on_delete=CASCADE, related_name='engine2')
+
+    def __str__(self):
+        return '%s vs %s' % (self.engine1.name, self.engine2.name)
+
+    def save(self, *args, **kwargs):
+        if self.engine1.pk > self.engine2.pk:
+            self.engine1, self.engine2 = self.engine2, self.engine1
+        super().save(*args, **kwargs)

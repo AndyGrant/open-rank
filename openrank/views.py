@@ -1,38 +1,43 @@
+from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 
-from openrank.models import *
+from itertools import combinations
+
 from openrank.forms import *
+from openrank.models import *
 
 def index(request):
     return render(request, 'index.html')
 
-def create_or_edit_family(request, pk=None):
 
-    family = get_object_or_404(EngineFamily, pk=pk) if pk else None
+def create_or_edit_instance(request, obj, form, template):
 
     if request.method == 'POST':
-        form = EngineFamilyForm(request.POST, request.FILES, instance=family)
+        form = form(request.POST, request.FILES, instance=obj)
         if form.is_valid():
             form.save()
             return redirect('index')
     else:
-        form = EngineFamilyForm(instance=family)
+        form = form(instance=obj)
 
-    return render(request, 'admin_family.html', { 'form' : form })
+    return render(request, template, { 'form' : form })
+
+def create_or_edit_family(request, pk=None):
+    obj = get_object_or_404(EngineFamily, pk=pk) if pk else None
+    return create_or_edit_instance(request, obj, EngineFamilyForm, 'admin_family.html')
 
 def create_or_edit_engine(request, pk=None):
+    obj = get_object_or_404(Engine, pk=pk) if pk else None
+    return create_or_edit_instance(request, obj, EngineForm, 'admin_engine.html')
 
-    engine = get_object_or_404(Engine, pk=pk) if pk else None
+def create_or_edit_rating_list(request, pk=None):
+    obj = get_object_or_404(RatingList, pk=pk) if pk else None
+    return create_or_edit_instance(request, obj, RatingListForm, 'admin_rating_list.html')
 
-    if request.method == 'POST':
-        form = EngineForm(request.POST, request.FILES, instance=engine)
-        if form.is_valid():
-            form.save()
-            return redirect('index')
-    else:
-        form = EngineForm(instance=engine)
+def create_or_edit_pairing(request, pk1, pk2=None):
+    obj   = get_object_or_404(Pairing, rating_list_id=pk1, pk=pk2)
+    return create_or_edit_instance(request, obj, PairingForm, 'admin_pairing.html')
 
-    return render(request, 'admin_engine.html', { 'form' : form })
 
 def list_families(request):
     context = { 'families' : EngineFamily.objects.all() }
@@ -41,3 +46,23 @@ def list_families(request):
 def list_engines(request):
     context = { 'engines' : Engine.objects.all() }
     return render(request, 'list_engines.html', context)
+
+def list_rating_lists(request):
+    context = { 'lists' : RatingList.objects.all() }
+    return render(request, 'list_rating_lists.html', context)
+
+def list_pairings(request, pk):
+    context = { 'pairings' : Pairing.objects.filter(rating_list=pk) }
+    return render(request, 'list_pairings.html', context)
+
+
+def generate_primary_pairings(request, pk):
+
+    rating_list = RatingList.objects.get(pk=pk)
+    pairings    = Pairing.objects.filter(rating_list=rating_list)
+    pks         = list(EngineFamily.objects.values_list('latest', flat=True))
+
+    for first, second in combinations(pks, 2):
+        Pairing.objects.get_or_create(rating_list=rating_list, engine1_id=first, engine2_id=second)
+
+    return redirect('index')
