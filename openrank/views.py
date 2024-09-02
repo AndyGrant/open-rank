@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 
@@ -56,13 +57,21 @@ def list_pairings(request, pk):
     return render(request, 'list_pairings.html', context)
 
 
-def generate_primary_pairings(request, pk):
+def generate_pairings(request, pk):
 
     rating_list = RatingList.objects.get(pk=pk)
     pairings    = Pairing.objects.filter(rating_list=rating_list)
-    pks         = list(EngineFamily.objects.values_list('latest', flat=True))
 
-    for first, second in combinations(pks, 2):
+    # Ensure pairings exist between all latest Engines
+    primary_pks = list(EngineFamily.objects.values_list('latest', flat=True))
+    for first, second in combinations(primary_pks, 2):
         Pairing.objects.get_or_create(rating_list=rating_list, engine1_id=first, engine2_id=second)
+
+    # For any non-primary engine without any Pairings, generate them against all primary engines
+    secondary = Engine.objects.exclude(pk__in=Subquery(EngineFamily.objects.values('latest')))
+    for engine in secondary:
+        if not Pairing.objects.filter(Q(engine1=engine) | Q(engine2=engine)).exists():
+            for pk in primary_pks:
+                Pairing.objects.create(rating_list=rating_list, engine1=engine, engine2_id=pk)
 
     return redirect('index')

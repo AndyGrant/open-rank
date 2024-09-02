@@ -19,5 +19,5 @@ urlpatterns = [
 
     path('pairings/<int:pk1>/edit/<int:pk2>/', views.create_or_edit_pairing, name='admin_pairing'),
     path('pairings/<int:pk>/list/', views.list_pairings, name='list_pairings'),
-    path('pairings/<int:pk>/generate/primary/', views.generate_primary_pairings, name='generate_primary_pairings'),
+    path('pairings/<int:pk>/generate/', views.generate_pairings, name='generate_pairings'),
 ]
