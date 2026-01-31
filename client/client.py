@@ -32,8 +32,8 @@ def sha256_for_file(file_path):
     return sha256.hexdigest()
 
 def load_tarball_shas():
-    if os.path.exists('worker.tarballs.info'):
-        with open('worker.tarballs.info') as fin:
+    if os.path.exists('tarballs.info'):
+        with open('tarballs.info') as fin:
             return json.loads(fin.read())
     return {}
 
@@ -153,7 +153,7 @@ def client_pull_image(args, auth_data, engine_json, tarball_shas):
 
     # Save the tarball sha long term to check against on each workload
     tarball_shas[image_name] = engine_json['sha256']
-    with open('worker.tarballs.info', 'w') as fout:
+    with open('tarballs.info', 'w') as fout:
         fout.write(json.dumps(tarball_shas))
 
 def client_pull_book(args, auth_data, book_json):
