@@ -263,11 +263,13 @@ def client_request_work(request):
             'image'     : pairing.engine_a.image_name(),
             'nps'       : pairing.engine_a.nps,
             'engine_id' : pairing.engine_a.id,
+            'sha256'    : pairing.engine_a.tarball_sha,
         },
         'engine_b' : {
             'image'     : pairing.engine_b.image_name(),
             'nps'       : pairing.engine_b.nps,
             'engine_id' : pairing.engine_b.id,
+            'sha256'    : pairing.engine_b.tarball_sha,
         },
     }
 

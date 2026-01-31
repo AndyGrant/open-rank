@@ -11,5 +11,8 @@ class OpenRankFailedDockerLoadError(Exception):
 class OpenRankAuthenticationError(Exception):
     pass
 
+class OpenRankCorruptedTarballError(Exception):
+    pass
+
 class OpenRankCorruptedBookError(Exception):
     pass

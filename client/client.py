@@ -31,6 +31,12 @@ def sha256_for_file(file_path):
             sha256.update(chunk)
     return sha256.hexdigest()
 
+def load_tarball_shas():
+    if os.path.exists('worker.tarballs.info'):
+        with open('worker.tarballs.info') as fin:
+            return json.loads(fin.read())
+    return {}
+
 def parse_arguments():
 
     # We can use ENV variables for the Username, Passwords, and Servers
@@ -60,6 +66,7 @@ def parse_arguments():
     args.server   = args.server   if args.server   else os.environ['OPENRANK_SERVER'  ]
 
     return args
+
 
 def client_connect(args, hwinfo):
 
@@ -93,12 +100,12 @@ def client_request_work(args, auth_data):
 
     return resp
 
-def client_pull_image(args, auth_data, engine_json):
+def client_pull_image(args, auth_data, engine_json, tarball_shas):
 
     image_name = engine_json['image']
 
-    if image_exists(image_name):
-        print ('Found Docker Image for %s locally' % (image_name))
+    if tarball_shas.get(image_name) == engine_json['sha256'] and image_exists(image_name):
+        print ('Found Docker Image for %s locally\n' % (image_name))
         return
 
     payload = {
@@ -106,27 +113,48 @@ def client_pull_image(args, auth_data, engine_json):
         'engine_id' : engine_json['engine_id']
     }
 
-    print ('Downloading Docker Image for %s...' % (image_name))
+    print ('Preparing Docker Image for %s...' % (image_name))
     resp = requests.post(url_join(args.server, 'client/pull_image/'), data=payload, stream=True)
 
     if resp.headers.get('Content-Type', '').startswith('application/json'):
         raise OpenRankGeneralReqError(resp.json()['error'])
 
-    with tempfile.NamedTemporaryFile(suffix='.tar') as tmp_tar:
+    with tempfile.NamedTemporaryFile() as zst_tmp:
 
-        print ('... Decompressing %s.tar.zst' % (image_name))
-        with zstd.ZstdDecompressor().stream_reader(resp.raw) as reader:
-            for chunk in iter(lambda: reader.read(1024 * 1024), b''):
-                tmp_tar.write(chunk)
-        tmp_tar.flush()
+        # Download the .tar.zst without modifying it
+        print ('... Downloading %s.tar.zst' % (image_name))
+        for chunk in iter(lambda: resp.raw.read(1024 * 1024), b''):
+            zst_tmp.write(chunk)
+        zst_tmp.flush()
 
-        print ('... Loading Docker Image from %s.tar' % (image_name))
-        subprocess.run(['docker', 'load', '-i', tmp_tar.name], capture_output=True, text=True)
+        # Compare against the expected sha256 from the server
+        compressed_sha = sha256_for_file(pathlib.Path(zst_tmp.name))
+        print('... Expected SHA256: %s' % (engine_json['sha256']))
+        print('... Compressed SHA256: %s' % (compressed_sha))
+        zst_tmp.seek(0) # Go back to the start of the file for reading
+
+        if engine_json['sha256'] != compressed_sha:
+            raise OpenRankCorruptedTarballError('Corrupted download for %s' % (image_name))
+
+        with tempfile.NamedTemporaryFile(suffix='.tar') as tmp_tar:
+
+            # Decompress now to a temporary .tar file
+            with zstd.ZstdDecompressor().stream_reader(resp.raw) as reader:
+                for chunk in iter(lambda: reader.read(1024 * 1024), b''):
+                    tmp_tar.write(chunk)
+            tmp_tar.flush()
+
+            # Finally, load the file into docker from the .tar
+            print ('... Loading Docker Image from %s.tar' % (image_name))
+            subprocess.run(['docker', 'load', '-i', tmp_tar.name], capture_output=True, text=True)
 
     if not image_exists(image_name):
         raise OpenRankFailedDockerLoadError('Could not load %s' % (image_name))
 
-    print ('... Docker Image for %s is ready\n' % (image_name))
+    # Save the tarball sha long term to check against on each workload
+    tarball_shas[image_name] = engine_json['sha256']
+    with open('worker.tarballs.info', 'w') as fout:
+        fout.write(json.dumps(tarball_shas))
 
 def client_pull_book(args, auth_data, book_json):
 
@@ -134,7 +162,7 @@ def client_pull_book(args, auth_data, book_json):
     book_path = pathlib.Path(__file__).resolve().parent / 'books' / book_name
 
     if os.path.exists(book_path):
-        print ('Found %s locally' % (book_name))
+        print ('Found %s locally\n' % (book_name))
         return
 
     payload = {
@@ -158,11 +186,11 @@ def client_pull_book(args, auth_data, book_json):
         compressed_sha = sha256_for_file(pathlib.Path(zst_tmp.name))
         print('... Expected SHA256: %s' % (book_json['sha256']))
         print('... Compressed SHA256: %s' % (compressed_sha))
+        zst_tmp.seek(0) # Go back to the start of the file for reading
 
         if book_json['sha256'] != compressed_sha:
             raise OpenRankCorruptedBookError('Corrupted download for %s' % (book_name))
 
-        zst_tmp.seek(0) # Go back to the start of the file for reading
         with book_path.open('wb') as book_file:
             print('... Decompressing to %s' % (book_name))
             with zstd.ZstdDecompressor().stream_reader(zst_tmp) as reader:
@@ -179,20 +207,18 @@ if __name__ == '__main__':
     if not os.path.exists('books'):
         os.makedirs('books')
 
-    # Grab the hardware info first, in case this machine is not allowed
-    hwinfo = HardwareConfig()
+    hwinfo       = HardwareConfig()             # Check if the machine is even allowed
+    args         = parse_arguments()            # Username, Password, Server
+    auth_data    = client_connect(args, hwinfo) # All requests will contain auth_data
+    tarball_shas = load_tarball_shas()          # Record of SHAs for all loaded tarballs
 
-    # Username, Password, Server
-    args = parse_arguments()
-
-    # Going forward, all requests contain secret and worker_id
-    auth_data = client_connect(args, hwinfo)
+    print (tarball_shas)
 
     # Could be { 'warning' : ... }
     workload = client_request_work(args, auth_data)
 
     print (workload)
 
-    client_pull_image(args, auth_data, workload['engine_a'])
-    client_pull_image(args, auth_data, workload['engine_b'])
+    client_pull_image(args, auth_data, workload['engine_a'], tarball_shas)
+    client_pull_image(args, auth_data, workload['engine_b'], tarball_shas)
     client_pull_book (args, auth_data, workload['book'    ])

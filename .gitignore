@@ -5,4 +5,5 @@
 __pycache__/
 books/artifacts/
 client/worker.info
+client/tarballs.info
 client/books/
