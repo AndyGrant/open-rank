@@ -1,6 +1,11 @@
-import os
-import django
+#!/usr/bin/env python3
+
 import csv
+import django
+import hashlib
+import os
+
+from pathlib import Path
 from django.utils.dateparse import parse_date
 
 # --- 0. Setup Django ---
@@ -60,8 +65,37 @@ for family in EngineFamily.objects.all():
         print('Marked latest engine %s for family %s' % (latest_engine.version, family.name))
 
 # --- 4. Add all Engines to all rating lists ---
-
 for rating_list in RatingList.objects.all():
     rating_list.engines.add(*Engine.objects.all())
 
-print('Import complete.')
+# --- 5. Set SHAs for Books/Engines ---
+
+archive_path = Path(__file__).resolve().parent / 'books' / 'artifacts'
+
+for rating_list in RatingList.objects.all():
+
+    if not (path := archive_path / rating_list.book_artifact()).exists():
+        raise Exception('Missing a .zst archive for %s' % (rating_list.book))
+
+    sha256 = hashlib.sha256()
+    with path.open('rb') as fin:
+        for chunk in iter(lambda: fin.read(8192), b''):
+            sha256.update(chunk)
+
+    rating_list.book_sha = sha256.hexdigest()
+    rating_list.save(update_fields=['book_sha'])
+
+archive_path = Path(__file__).resolve().parent / 'engines' / 'tarballs'
+
+for engine in Engine.objects.all():
+
+    if not (path := archive_path / engine.tarball_name()).exists():
+        raise Exception('Missing a .zst archive for %s' % (engine.image_name()))
+
+    sha256 = hashlib.sha256()
+    with path.open('rb') as fin:
+        for chunk in iter(lambda: fin.read(8192), b''):
+            sha256.update(chunk)
+
+    engine.tarball_sha = sha256.hexdigest()
+    engine.save(update_fields=['tarball_sha'])
