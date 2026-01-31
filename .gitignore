@@ -4,5 +4,5 @@
 *.zst
 __pycache__/
 books/artifacts/
-client/tarballs/
 client/worker.info
+client/books/

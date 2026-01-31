@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import hashlib
 import io
 import json
 import os
@@ -22,6 +23,13 @@ def image_exists(image_name):
         ['docker', 'image', 'inspect', image_name],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     ).returncode == 0
+
+def sha256_for_file(file_path):
+    sha256 = hashlib.sha256()
+    with file_path.open('rb') as fin:
+        for chunk in iter(lambda: fin.read(8192), b''):
+            sha256.update(chunk)
+    return sha256.hexdigest()
 
 def parse_arguments():
 
@@ -120,10 +128,56 @@ def client_pull_image(args, auth_data, engine_json):
 
     print ('... Docker Image for %s is ready\n' % (image_name))
 
+def client_pull_book(args, auth_data, book_json):
+
+    book_name = book_json['name']
+    book_path = pathlib.Path(__file__).resolve().parent / 'books' / book_name
+
+    if os.path.exists(book_path):
+        print ('Found %s locally' % (book_name))
+        return
+
+    payload = {
+        **auth_data,
+        'rating_list_id' : book_json['rating_list_id']
+    }
+
+    print ('Downloading Book Archive for %s...' % (book_name))
+    resp = requests.post(url_join(args.server, 'client/pull_book/'), data=payload, stream=True)
+
+    if resp.headers.get('Content-Type', '').startswith('application/json'):
+        raise OpenRankGeneralReqError(resp.json()['error'])
+
+    with tempfile.NamedTemporaryFile() as zst_tmp:
+
+        print('... Downloading %s.zst' % (book_name))
+        for chunk in iter(lambda: resp.raw.read(1024 * 1024), b''):
+            zst_tmp.write(chunk)
+        zst_tmp.flush()
+
+        compressed_sha = sha256_for_file(pathlib.Path(zst_tmp.name))
+        print('... Expected SHA256: %s' % (book_json['sha256']))
+        print('... Compressed SHA256: %s' % (compressed_sha))
+
+        if book_json['sha256'] != compressed_sha:
+            raise OpenRankCorruptedBookError('Corrupted download for %s' % (book_name))
+
+        zst_tmp.seek(0) # Go back to the start of the file for reading
+        with book_path.open('wb') as book_file:
+            print('... Decompressing to %s' % (book_name))
+            with zstd.ZstdDecompressor().stream_reader(zst_tmp) as reader:
+                for chunk in iter(lambda: reader.read(1024 * 1024), b''):
+                    book_file.write(chunk)
+            book_file.flush()
+
 if __name__ == '__main__':
 
     # Use client.py's path as the base pathway always
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+    # Ensure book/ directory exists to save to
+    if not os.path.exists('books'):
+        os.makedirs('books')
 
     # Grab the hardware info first, in case this machine is not allowed
     hwinfo = HardwareConfig()
@@ -141,3 +195,4 @@ if __name__ == '__main__':
 
     client_pull_image(args, auth_data, workload['engine_a'])
     client_pull_image(args, auth_data, workload['engine_b'])
+    client_pull_book (args, auth_data, workload['book'    ])

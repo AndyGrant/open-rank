@@ -85,6 +85,8 @@ for rating_list in RatingList.objects.all():
     rating_list.book_sha = sha256.hexdigest()
     rating_list.save(update_fields=['book_sha'])
 
+    print ('Set %s\'s book_sha to %s' % (rating_list.name, rating_list.book_sha))
+
 archive_path = Path(__file__).resolve().parent / 'engines' / 'tarballs'
 
 for engine in Engine.objects.all():
@@ -99,3 +101,5 @@ for engine in Engine.objects.all():
 
     engine.tarball_sha = sha256.hexdigest()
     engine.save(update_fields=['tarball_sha'])
+
+    print ('Set %s\'s tarball_sha to %s' % (engine.name(), engine.tarball_sha))

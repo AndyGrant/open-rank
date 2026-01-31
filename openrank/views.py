@@ -245,16 +245,19 @@ def client_request_work(request):
     if not pairing:
         return JsonResponse({ 'warning' : 'No pairings need to be to played right now. ' })
 
-    # TODO: This should be providing information about an Opening Book
-
     workload = {
         'config' : {
-            'games'        : pairing.workload_size(worker),
-            'pairing_id'   : pairing.id,
-            'thread_count' : pairing.stage.rating_list.thread_count,
-            'hashsize'     : pairing.stage.rating_list.hashsize,
-            'base_time'    : pairing.stage.rating_list.base_time,
-            'increment'    : pairing.stage.rating_list.increment,
+            'games'          : pairing.workload_size(worker),
+            'pairing_id'     : pairing.id,
+            'thread_count'   : pairing.stage.rating_list.thread_count,
+            'hashsize'       : pairing.stage.rating_list.hashsize,
+            'base_time'      : pairing.stage.rating_list.base_time,
+            'increment'      : pairing.stage.rating_list.increment,
+        },
+        'book' : {
+            'rating_list_id' : pairing.stage.rating_list.id,
+            'name'           : pairing.stage.rating_list.book,
+            'sha256'         : pairing.stage.rating_list.book_sha,
         },
         'engine_a' : {
             'image'     : pairing.engine_a.image_name(),
@@ -269,8 +272,7 @@ def client_request_work(request):
     }
 
     # Kick book_index as a pseudo priority mechanism
-    with transaction.atomic():
-        Pairing.objects.filter(pk=pairing.pk).update(book_index=F('book_index') + workload['config']['games'])
+    Pairing.objects.filter(pk=pairing.pk).update(book_index=F('book_index') + workload['config']['games'])
 
     return JsonResponse(workload)
 
@@ -291,5 +293,19 @@ def client_pull_image(request):
     # TODO: We must throw a SERIOUS flag if the tarball is missing
 
     path = settings.ENGINE_ARTIFACT_DIR / engine.tarball_name()
-
     return FileResponse(open(path, 'rb'), as_attachment=True, filename=engine.tarball_name())
+
+@csrf_exempt
+@require_POST
+def client_pull_book(request):
+
+    worker, resp = client_auth_helper(request)
+    if resp != None:
+        return resp
+
+    rating_list_id = request.POST.get('rating_list_id')
+    if not rating_list_id or not (rating_list := RatingList.objects.filter(id=rating_list_id).first()):
+        return JsonResponse({ 'error' : 'Attempting to pull book from non-existent Rating List' })
+
+    path = settings.BOOK_ARTIFACT_DIR / rating_list.book_artifact()
+    return FileResponse(open(path, 'rb'), as_attachment=True, filename=rating_list.book_artifact())
