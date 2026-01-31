@@ -96,7 +96,7 @@ def client_connect(args, hwinfo):
 def client_request_work(args, auth_data):
 
     if 'error' in (resp := requests.post(url_join(args.server, 'client/request_work/'), data=auth_data).json()):
-        raise OpenRankGeneralReqError(resp['error'])
+        raise OpenRankGeneralRequestError(resp['error'])
 
     return resp
 
@@ -117,7 +117,7 @@ def client_pull_image(args, auth_data, engine_json, tarball_shas):
     resp = requests.post(url_join(args.server, 'client/pull_image/'), data=payload, stream=True)
 
     if resp.headers.get('Content-Type', '').startswith('application/json'):
-        raise OpenRankGeneralReqError(resp.json()['error'])
+        raise OpenRankGeneralRequestError(resp.json()['error'])
 
     with tempfile.NamedTemporaryFile() as zst_tmp:
 
@@ -174,7 +174,7 @@ def client_pull_book(args, auth_data, book_json):
     resp = requests.post(url_join(args.server, 'client/pull_book/'), data=payload, stream=True)
 
     if resp.headers.get('Content-Type', '').startswith('application/json'):
-        raise OpenRankGeneralReqError(resp.json()['error'])
+        raise OpenRankGeneralRequestError(resp.json()['error'])
 
     with tempfile.NamedTemporaryFile() as zst_tmp:
 
@@ -211,8 +211,6 @@ if __name__ == '__main__':
     args         = parse_arguments()            # Username, Password, Server
     auth_data    = client_connect(args, hwinfo) # All requests will contain auth_data
     tarball_shas = load_tarball_shas()          # Record of SHAs for all loaded tarballs
-
-    print (tarball_shas)
 
     # Could be { 'warning' : ... }
     workload = client_request_work(args, auth_data)

@@ -21,7 +21,7 @@ class Worker(models.Model):
     hwinfo  = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
-        return '%s by %s' % (hwinfo.get('cpu_name', 'UNKNOWN'), user.username)
+        return '%s by %s' % (self.hwinfo.get('cpu_name', 'UNKNOWN'), self.user.username)
 
 class EngineFamily(models.Model):
 

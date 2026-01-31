@@ -33,6 +33,9 @@ class HardwareConfig:
         # NUMA Info
         self.numa_nodes, self.numa_maps = self.get_numa_core_mapping()
 
+        # Track znver1/znver2 which have failing PEXT support
+        self.is_znver1, self.is_znver2 = self.detect_old_zen_versions()
+
         self.validate_hardware()
 
     def get_arch(self, info):
@@ -44,7 +47,6 @@ class HardwareConfig:
             return 'UNKNOWN'
 
     def get_numa_core_mapping(self):
-
         try:
             numa_text = subprocess.check_output(['numactl', '--hardware'], text=True)
             numa_map = {
@@ -54,6 +56,16 @@ class HardwareConfig:
             return len(numa_map), numa_map
         except Exception as error:
             return None, None
+
+    def detect_old_zen_versions(self):
+        for cxx in ['g++', 'clang++']:
+            try:
+                cmd    = [cxx, '-march=native', '-dM', '-E', '-']
+                proc   = subprocess.run(cmd, input=b'', stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                macros = proc.stdout.decode('ascii', errors='ignore')
+                return '__znver1' in macros, '__znver2' in macros
+            except: pass
+        return None, None
 
     def validate_hardware(self):
 
@@ -68,6 +80,12 @@ class HardwareConfig:
 
         if not self.numa_nodes:
             raise OpenRankHardwareReqError('open-rank failed to determine NUMA information via numactl')
+
+        if self.is_znver1 == None or self.is_znver2 == None:
+            raise OpenRankHardwareReqError('open-rank failed to determine znver1/znver2 via g++/clang++')
+
+        if self.is_znver1 or self.is_znver2:
+            raise OpenRankHardwareReqError('open-rank does not support znver1/znver2, due to failing PEXT support')
 
 if __name__ == '__main__':
     for key, value in vars(HardwareConfig()).items():
