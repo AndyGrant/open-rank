@@ -15,7 +15,7 @@ class HardwareConfig:
 
         # CPU Info
         info = cpuinfo.get_cpu_info()
-        self.cpu_flags      = info.get('flags', [])
+        self.cpu_flags      = list(map(str.lower, info.get('flags', [])))
         self.cpu_name       = info.get('brand_raw', info.get('brand', 'Unknown'))
         self.arch           = self.get_arch(info)
 
@@ -34,7 +34,7 @@ class HardwareConfig:
         self.numa_nodes, self.numa_maps = self.get_numa_core_mapping()
 
         # Track znver1/znver2 which have failing PEXT support
-        self.is_znver1, self.is_znver2 = self.detect_old_zen_versions()
+        self.cxx_compiler, self.is_znver1, self.is_znver2 = self.detect_old_zen_versions()
 
         self.validate_hardware()
 
@@ -63,9 +63,9 @@ class HardwareConfig:
                 cmd    = [cxx, '-march=native', '-dM', '-E', '-']
                 proc   = subprocess.run(cmd, input=b'', stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 macros = proc.stdout.decode('ascii', errors='ignore')
-                return '__znver1' in macros, '__znver2' in macros
+                return cxx, '__znver1' in macros, '__znver2' in macros
             except: pass
-        return None, None
+        return None, None, None
 
     def validate_hardware(self):
 
