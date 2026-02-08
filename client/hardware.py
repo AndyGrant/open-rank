@@ -15,14 +15,14 @@ class HardwareConfig:
 
         # CPU Info
         info = cpuinfo.get_cpu_info()
-        self.cpu_flags      = list(map(str.lower, info.get('flags', [])))
-        self.cpu_name       = info.get('brand_raw', info.get('brand', 'Unknown'))
-        self.arch           = self.get_arch(info)
+        self.cpu_flags = list(map(str.lower, info.get('flags', [])))
+        self.cpu_name  = info.get('brand_raw', info.get('brand', 'Unknown'))
+        self.arch      = self.get_arch(info)
 
         # OS Info
-        self.os_name        = platform.system()
-        self.os_ver         = platform.release()
-        self.python_ver     = platform.python_version()
+        self.os_name    = platform.system()
+        self.os_ver     = platform.release()
+        self.python_ver = platform.python_version()
 
         # Hardware Info
         self.mac_address    = hex(uuid.getnode()).lower()[2:]
@@ -81,11 +81,14 @@ class HardwareConfig:
         if not self.numa_nodes:
             raise OpenRankHardwareReqError('open-rank failed to determine NUMA information via numactl')
 
-        if self.is_znver1 == None or self.is_znver2 == None:
+        if self.is_znver1 is None or self.is_znver2 is None:
             raise OpenRankHardwareReqError('open-rank failed to determine znver1/znver2 via g++/clang++')
 
         if self.is_znver1 or self.is_znver2:
             raise OpenRankHardwareReqError('open-rank does not support znver1/znver2, due to failing PEXT support')
+
+        if self.logical_cores != 2 * self.physical_cores:
+            raise OpenRankHardwareReqError('open-rank suspects this is a P+E system, where threads != cores')
 
 if __name__ == '__main__':
     for key, value in vars(HardwareConfig()).items():
