@@ -5,4 +5,3 @@ class OpenrankConfig(AppConfig):
 
     def ready(self):
         import openrank.signals
-        import openrank.checks
