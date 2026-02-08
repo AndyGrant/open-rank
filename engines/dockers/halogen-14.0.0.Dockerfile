@@ -1,13 +1,18 @@
 FROM ubuntu:24.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG HALOGEN_VERSION=14.0.0
+
+ARG BINARY_NAME=Halogen-14-ubuntu-avx2-pext
+ARG DOWNLOAD_URL=https://github.com/KierenP/Halogen/releases/download/v14/${BINARY_NAME}
 
 RUN apt update && apt-get -y install wget
 
-RUN wget https://github.com/KierenP/Halogen/releases/download/v${HALOGEN_VERSION}/Halogen-${HALOGEN_VERSION}-ubuntu-latest-avx2-pext.exe && chmod +x Halogen-${HALOGEN_VERSION}-ubuntu-latest-avx2-pext.exe
+RUN wget ${DOWNLOAD_URL} && \
+    chmod +x ${BINARY_NAME} && \
+    mv ${BINARY_NAME} halogen
 
 FROM ubuntu:24.04
 
-COPY --from=builder /Halogen-${HALOGEN_VERSION}-ubuntu-latest-avx2-pext.exe /usr/local/bin/Halogen-${HALOGEN_VERSION}-ubuntu-latest-avx2-pext.exe
-CMD [ "/usr/local/bin/Halogen-${HALOGEN_VERSION}-ubuntu-latest-avx2-pext.exe" ]
+COPY --from=builder /halogen /usr/local/bin/halogen
+
+CMD [ "/usr/local/bin/halogen" ]
