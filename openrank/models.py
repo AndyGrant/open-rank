@@ -21,7 +21,7 @@ class Worker(models.Model):
     hwinfo  = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
-        return '%s by %s' % (hwinfo.get('cpu_name', 'UNKNOWN'), user.username)
+        return '%s by %s' % (self.hwinfo.get('cpu_name', 'UNKNOWN'), self.user.username)
 
 class EngineFamily(models.Model):
 
@@ -37,6 +37,7 @@ class Engine(models.Model):
     family       = models.ForeignKey(EngineFamily, on_delete=models.CASCADE, related_name='engines')
     version      = models.CharField(max_length=50)
     release_date = models.DateField(null=True, blank=True)
+    tarball_sha  = models.CharField(max_length=255)
 
     disabled = models.BooleanField(default=False)
     latest   = models.BooleanField(default=False)
@@ -73,6 +74,7 @@ class RatingList(models.Model):
     base_time    = models.FloatField()
     increment    = models.FloatField()
     book         = models.CharField(max_length=255)
+    book_sha     = models.CharField(max_length=255)
 
     engines = models.ManyToManyField('Engine', related_name='rating_lists', blank=True)
 

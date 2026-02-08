@@ -2,7 +2,7 @@
 class OpenRankHardwareReqError(Exception):
     pass
 
-class OpenRankGeneralReqError(Exception):
+class OpenRankGeneralRequestError(Exception):
     pass
 
 class OpenRankFailedDockerLoadError(Exception):
@@ -11,3 +11,8 @@ class OpenRankFailedDockerLoadError(Exception):
 class OpenRankAuthenticationError(Exception):
     pass
 
+class OpenRankCorruptedTarballError(Exception):
+    pass
+
+class OpenRankCorruptedBookError(Exception):
+    pass
