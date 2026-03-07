@@ -17,6 +17,32 @@ from openrank.models import *
 FAMILIES_CSV = 'families.csv'
 ENGINES_CSV = 'engines.csv'
 
+# --- 0. Create Rating List ---
+
+if not RatingList.objects.filter(name='1+1').first():
+
+    rl = RatingList.objects.create(
+        name         ='Bullet',
+        thread_count = 1,
+        hashsize     = 64,
+        base_time    = 60,
+        increment    = 1,
+        book         = 'UHO_Lichess_4852_v1.epd',
+    )
+
+    print ('Created new Rating List: %s' % (str(rl)))
+
+    stages = [(1, 10000, 100), (2, 50, 100), (3, 25, 100), (4, 10, 100)]
+
+    for stage_num, top_n, games in stages:
+        rls = RatingListStage.objects.create(
+            rating_list   = rl,
+            stage_number  = stage_num,
+            top_n_engines = top_n,
+            games         = games,
+        )
+        print ('Created new Rating List Stage: %s' % (str(rls)))
+
 # --- 1. Import families ---
 with open(FAMILIES_CSV, newline='', encoding='utf-8') as f:
     reader = csv.DictReader(f)
@@ -24,8 +50,8 @@ with open(FAMILIES_CSV, newline='', encoding='utf-8') as f:
         EngineFamily.objects.get_or_create(
             name=row['name'],
             defaults={
-                'author': row['author'],
-                'website': row['website'],
+                'author'  : row['author'],
+                'website' : row['website'],
             },
         )
 

@@ -66,8 +66,8 @@ def build_image(filename, rebuild, dry_run):
 def main():
 
     p = argparse.ArgumentParser()
-    p.add_argument('--rebuild', action='store_true', help='Rebuild existing images')
     p.add_argument('--dry',     action='store_true', help='Do not actually do anything')
+    p.add_argument('--rebuild', action='store_true', help='Rebuild existing images')
     p.add_argument('--regex',   default=None,        help='Regex to match for each .Dockerfile')
     p.add_argument('-j',        action='store_true', help='Use all threads to build concurrently')
 

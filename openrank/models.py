@@ -82,7 +82,7 @@ class RatingList(models.Model):
         return self.book + '.zst'
 
     def __str__(self):
-        return '%d-thread %d + %d' % (self.thread_count, self.base_time, self.increment)
+        return '%d-thread %d+%d' % (self.thread_count, self.base_time, self.increment)
 
 class RatingListStage(models.Model):
 
