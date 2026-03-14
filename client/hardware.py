@@ -34,9 +34,9 @@ class HardwareConfig:
         self.numa_nodes, self.numa_maps = self.get_numa_core_mapping()
 
         # Track znver1/znver2 which have failing PEXT support
-        self.cxx_compiler, self.is_znver1, self.is_znver2 = self.detect_old_zen_versions()
+        self.cxx_compiler, is_znver1, is_znver2 = self.detect_old_zen_versions()
 
-        self.validate_hardware()
+        self.validate_hardware(is_znver1, is_znver2)
 
     def get_arch(self, info):
         if info.get('arch', '').lower() in ('x86_64', 'amd64', 'x86'):
@@ -67,7 +67,7 @@ class HardwareConfig:
             except: pass
         return None, None, None
 
-    def validate_hardware(self):
+    def validate_hardware(self, is_znver1, is_znver2):
 
         if self.arch != 'x86':
             raise OpenRankHardwareReqError('open-rank is only supported for x86 machines')
@@ -81,10 +81,10 @@ class HardwareConfig:
         if not self.numa_nodes:
             raise OpenRankHardwareReqError('open-rank failed to determine NUMA information via numactl')
 
-        if self.is_znver1 is None or self.is_znver2 is None:
+        if is_znver1 is None or is_znver2 is None:
             raise OpenRankHardwareReqError('open-rank failed to determine znver1/znver2 via g++/clang++')
 
-        if self.is_znver1 or self.is_znver2:
+        if is_znver1 or is_znver2:
             raise OpenRankHardwareReqError('open-rank does not support znver1/znver2, due to failing PEXT support')
 
         if self.logical_cores != 2 * self.physical_cores:

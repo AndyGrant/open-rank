@@ -19,7 +19,7 @@ ENGINES_CSV = 'engines.csv'
 
 # --- 0. Create Rating List ---
 
-if not RatingList.objects.filter(name='1+1').first():
+if not RatingList.objects.filter(name='Bullet').first():
 
     rl = RatingList.objects.create(
         name         ='Bullet',
@@ -129,3 +129,17 @@ for engine in Engine.objects.all():
     engine.save(update_fields=['tarball_sha'])
 
     print ('Set %s\'s tarball_sha to %s' % (engine.name(), engine.tarball_sha))
+
+# --- 6. Create Admin User from ENV vars ---
+
+username = os.environ.get('OPENRANK_USERNAME')
+password = os.environ.get('OPENRANK_PASSWORD')
+
+if username and password and not User.objects.filter(username=username).exists():
+    user = User.objects.create_user(
+        username=username,
+        password=password,
+        enabled=True,
+        admin=True,
+    )
+    print('Created user: %s (enabled=True, admin=True)' % username)

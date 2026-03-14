@@ -1,6 +1,7 @@
 import json
 import pathlib
 import secrets
+from functools import wraps
 
 from django.conf import settings
 from django.contrib import messages
@@ -171,18 +172,24 @@ def pairings_generate(request, stage_id):
 #                                         C L I E N T                                         #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def client_auth_helper(request):
+def client_auth(view_func):
 
-    worker_id = request.POST.get('worker_id')
-    secret    = request.POST.get('secret')
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
 
-    if not worker_id or not secret:
-        return None, JsonResponse({ 'error': 'Authentication information not provided.' })
+        # Present in all client requests, except the initial connection
+        worker_id = request.POST.get('worker_id')
+        secret    = request.POST.get('secret')
 
-    if not (worker := Worker.objects.filter(id=worker_id, secret=secret).first()):
-        return None, JsonResponse({ 'error': 'Provided information does not match an existing Worker.' })
+        if not worker_id or not secret:
+            return JsonResponse({ 'error': 'Authentication information not provided.' })
 
-    return worker, None
+        if not (worker := Worker.objects.filter(id=worker_id, secret=secret).first()):
+            return JsonResponse({ 'error': 'Provided information does not match an existing Worker.' })
+
+        return view_func(request, worker, *args, **kwargs)
+
+    return wrapper
 
 @csrf_exempt
 @require_POST
@@ -223,12 +230,8 @@ def client_connect(request):
 
 @csrf_exempt
 @require_POST
-def client_request_work(request):
-
-    # Always authenticate via the secret token
-    worker, resp = client_auth_helper(request)
-    if resp != None:
-        return resp
+@client_auth # Source of the worker argument
+def client_request_work(request, worker):
 
     # TODO: This should be filtered for private engines, to ensure the user can build it
     # TODO: This should be filtered to ensure core counts are sufficient
@@ -280,12 +283,8 @@ def client_request_work(request):
 
 @csrf_exempt
 @require_POST
-def client_pull_image(request):
-
-    # Always authenticate via the secret token
-    worker, resp = client_auth_helper(request)
-    if resp != None:
-        return resp
+@client_auth # Source of the worker argument
+def client_pull_image(request, worker):
 
     engine_id = request.POST.get('engine_id')
     if not engine_id or not (engine := Engine.objects.filter(id=engine_id).first()):
@@ -299,11 +298,8 @@ def client_pull_image(request):
 
 @csrf_exempt
 @require_POST
-def client_pull_book(request):
-
-    worker, resp = client_auth_helper(request)
-    if resp != None:
-        return resp
+@client_auth # Source of the worker argument
+def client_pull_book(request, worker):
 
     rating_list_id = request.POST.get('rating_list_id')
     if not rating_list_id or not (rating_list := RatingList.objects.filter(id=rating_list_id).first()):
