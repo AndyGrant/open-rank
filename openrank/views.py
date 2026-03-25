@@ -13,10 +13,15 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
+from client.schemas import *
+
 from .models import *
 from .forms import *
 
 # HELPERS
+
+def json_response(response_schema):
+    return JsonResponse(response_schema.model_dump())
 
 def next_stage_number(rating_list):
     last = rating_list.stages.order_by('-stage_number').first()
@@ -177,17 +182,17 @@ def client_auth(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
 
-        # Present in all client requests, except the initial connection
-        worker_id = request.POST.get('worker_id')
-        secret    = request.POST.get('secret')
+        body = json.loads(request.body)
+        worker_id = body.get('worker_id')
+        secret    = body.get('secret')
 
         if not worker_id or not secret:
-            return JsonResponse({ 'error': 'Authentication information not provided.' })
+            return json_response(ErrorResponse(error='Authentication information not provided.'))
 
         if not (worker := Worker.objects.filter(id=worker_id, secret=secret).first()):
-            return JsonResponse({ 'error': 'Provided information does not match an existing Worker.' })
+            return json_response(ErrorResponse(error='Provided information does not match an existing Worker.'))
 
-        return view_func(request, worker, *args, **kwargs)
+        return view_func(request, worker, body, *args, **kwargs)
 
     return wrapper
 
@@ -195,43 +200,36 @@ def client_auth(view_func):
 @require_POST
 def client_connect(request):
 
-    username  = request.POST.get('username')
-    password  = request.POST.get('password')
-    worker_id = request.POST.get('worker_id')
-    secret    = request.POST.get('secret')
-    hardware  = json.loads(request.POST.get('hardware'))
+    req = ConnectRequest.model_validate(json.loads(request.body))
 
-    if not username or not password:
-        return JsonResponse({ 'error' : 'Missing username or password.' })
-
-    if not (user := authenticate(request, username=username, password=password)):
-        return JsonResponse({ 'error' : 'Failed to authenticate user.' })
+    if not (user := authenticate(request, username=req.username, password=req.password)):
+        return json_response(ErrorResponse(error='Failed to authenticate user.'))
 
     if not user.enabled:
-        return JsonResponse({ 'error' : 'Authenticated successfully, but the user is not enabled.' })
+        return json_response(ErrorResponse(error='Authenticated successfully, but the user is not enabled.'))
 
-    if not hardware or 'logical_cores' not in hardware:
-        return JsonResponse({ 'error' : 'Must provide at least logical_cores for hardware info.' })
+    if not req.hardware or 'logical_cores' not in req.hardware:
+        return json_response(ErrorResponse(error='Must provide at least logical_cores for hardware info.'))
 
-    worker = None # Attempt to fetch an already saved Worker
-    if worker_id and secret:
-        worker = Worker.objects.filter(id=worker_id, secret=secret, user=user).first()
+    worker = None
+    if req.worker_id and req.secret:
+        worker = Worker.objects.filter(id=req.worker_id, secret=req.secret, user=user).first()
 
-    if not worker: # No such Worker found, create a new one
+    if not worker:
         worker = Worker.objects.create(user=user, secret=secrets.token_hex(32))
 
-    worker.hwinfo = hardware
+    worker.hwinfo = req.hardware
     worker.save()
 
-    return JsonResponse({
-        'secret'    : worker.secret,
-        'worker_id' : worker.id,
-    })
+    return json_response(ConnectResponse(
+        secret    = worker.secret,
+        worker_id = worker.id,
+    ))
 
 @csrf_exempt
 @require_POST
-@client_auth # Source of the worker argument
-def client_request_work(request, worker):
+@client_auth # Source of the worker and body arguments
+def client_request_work(request, worker, body):
 
     # TODO: This should be filtered for private engines, to ensure the user can build it
     # TODO: This should be filtered to ensure core counts are sufficient
@@ -246,49 +244,50 @@ def client_request_work(request, worker):
     )
 
     if not pairing:
-        return JsonResponse({ 'warning' : 'No pairings need to be to played right now. ' })
+        return json_response(WarningResponse(warning='No pairings need to be to played right now.'))
 
-    workload = {
-        'config' : {
-            'games'          : pairing.workload_size(worker),
-            'pairing_id'     : pairing.id,
-            'thread_count'   : pairing.stage.rating_list.thread_count,
-            'hashsize'       : pairing.stage.rating_list.hashsize,
-            'base_time'      : pairing.stage.rating_list.base_time,
-            'increment'      : pairing.stage.rating_list.increment,
-        },
-        'book' : {
-            'rating_list_id' : pairing.stage.rating_list.id,
-            'name'           : pairing.stage.rating_list.book,
-            'sha256'         : pairing.stage.rating_list.book_sha,
-        },
-        'engine_a' : {
-            'image'     : pairing.engine_a.image_name(),
-            'nps'       : pairing.engine_a.nps,
-            'engine_id' : pairing.engine_a.id,
-            'sha256'    : pairing.engine_a.tarball_sha,
-        },
-        'engine_b' : {
-            'image'     : pairing.engine_b.image_name(),
-            'nps'       : pairing.engine_b.nps,
-            'engine_id' : pairing.engine_b.id,
-            'sha256'    : pairing.engine_b.tarball_sha,
-        },
-    }
+    workload = WorkloadResponse(
+        config = WorkloadConfig(
+            games          = pairing.workload_size(worker),
+            pairing_id     = pairing.id,
+            thread_count   = pairing.stage.rating_list.thread_count,
+            hashsize       = pairing.stage.rating_list.hashsize,
+            base_time      = pairing.stage.rating_list.base_time,
+            increment      = pairing.stage.rating_list.increment,
+        ),
+        book = BookInfo(
+            rating_list_id = pairing.stage.rating_list.id,
+            name           = pairing.stage.rating_list.book,
+            sha256         = pairing.stage.rating_list.book_sha,
+        ),
+        engine_a = EngineInfo(
+            image     = pairing.engine_a.image_name(),
+            nps       = pairing.engine_a.nps,
+            engine_id = pairing.engine_a.id,
+            sha256    = pairing.engine_a.tarball_sha,
+        ),
+        engine_b = EngineInfo(
+            image     = pairing.engine_b.image_name(),
+            nps       = pairing.engine_b.nps,
+            engine_id = pairing.engine_b.id,
+            sha256    = pairing.engine_b.tarball_sha,
+        ),
+    )
 
     # Kick book_index as a pseudo priority mechanism
-    Pairing.objects.filter(pk=pairing.pk).update(book_index=F('book_index') + workload['config']['games'])
+    Pairing.objects.filter(pk=pairing.pk).update(book_index=F('book_index') + workload.config.games)
 
-    return JsonResponse(workload)
+    return json_response(workload)
 
 @csrf_exempt
 @require_POST
-@client_auth # Source of the worker argument
-def client_pull_image(request, worker):
+@client_auth # Source of the worker and body arguments
+def client_pull_image(request, worker, body):
 
-    engine_id = request.POST.get('engine_id')
-    if not engine_id or not (engine := Engine.objects.filter(id=engine_id).first()):
-        return JsonResponse({ 'error' : 'Attempting to pull non-existent engine image' })
+    req = PullImageRequest.model_validate(body)
+
+    if not (engine := Engine.objects.filter(id=req.engine_id).first()):
+        return json_response(ErrorResponse(error='Attempting to pull non-existent engine image'))
 
     # TODO: We must verify that this worker is eligible for the requested image
     # TODO: We must throw a SERIOUS flag if the tarball is missing
@@ -298,12 +297,13 @@ def client_pull_image(request, worker):
 
 @csrf_exempt
 @require_POST
-@client_auth # Source of the worker argument
-def client_pull_book(request, worker):
+@client_auth # Source of the worker and body arguments
+def client_pull_book(request, worker, body):
 
-    rating_list_id = request.POST.get('rating_list_id')
-    if not rating_list_id or not (rating_list := RatingList.objects.filter(id=rating_list_id).first()):
-        return JsonResponse({ 'error' : 'Attempting to pull book from non-existent Rating List' })
+    req = PullBookRequest.model_validate(body)
+
+    if not (rating_list := RatingList.objects.filter(id=req.rating_list_id).first()):
+        return json_response(ErrorResponse(error='Attempting to pull book from non-existent Rating List'))
 
     path = settings.BOOK_ARTIFACT_DIR / rating_list.book_artifact()
     return FileResponse(open(path, 'rb'), as_attachment=True, filename=rating_list.book_artifact())

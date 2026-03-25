@@ -14,6 +14,7 @@ import zstandard as zstd
 
 from exceptions import *
 from hardware import HardwareConfig
+from schemas import *
 
 def url_join(*parts):
     return '/'.join(p.strip('/') for p in parts if p) + '/'
@@ -75,46 +76,60 @@ def client_connect(args, hwinfo):
     if os.path.exists('worker.info'):
         with open('worker.info', 'r') as f:
             secret, worker_id = f.read().strip().split()
+            worker_id = int(worker_id)
 
-    payload = {
-        'username' : args.username,
-        'password' : args.password,
-        'hardware' : json.dumps(vars(hwinfo)),
-    }
+    req = ConnectRequest(
+        username  = args.username,
+        password  = args.password,
+        hardware  = vars(hwinfo),
+        worker_id = worker_id,
+        secret    = secret,
+    )
 
-    if secret and worker_id:
-        payload.update({ 'secret': secret, 'worker_id': worker_id })
+    resp = requests.post(url_join(args.server, 'client/connect/'), json=req.model_dump()).json()
 
-    if 'error' in (resp := requests.post(url_join(args.server, 'client/connect/'), data=payload).json()):
+    if 'error' in resp:
         raise OpenRankAuthenticationError(resp['error'])
 
-    with open('worker.info', 'w') as f:
-        f.write('%s %s' % (resp['secret'], resp['worker_id']))
+    connect_resp = ConnectResponse.model_validate(resp)
 
-    return resp
+    with open('worker.info', 'w') as f:
+        f.write('%s %s' % (connect_resp.secret, connect_resp.worker_id))
+
+    return {
+        'secret'    : connect_resp.secret,
+        'worker_id' : connect_resp.worker_id,
+    }
 
 def client_request_work(args, auth_data):
 
-    if 'error' in (resp := requests.post(url_join(args.server, 'client/request_work/'), data=auth_data).json()):
+    resp = requests.post(url_join(args.server, 'client/request_work/'), json=auth_data).json()
+
+    if 'error' in resp:
         raise OpenRankGeneralRequestError(resp['error'])
 
-    return resp
+    if 'warning' in resp:
+        print(resp['warning'])
+        return None
 
-def client_pull_image(args, auth_data, engine_json, tarball_shas):
+    return WorkloadResponse.model_validate(resp)
 
-    image_name = engine_json['image']
+def client_pull_image(args, auth_data, engine_info, tarball_shas):
 
-    if tarball_shas.get(image_name) == engine_json['sha256'] and image_exists(image_name):
+    image_name = engine_info.image
+
+    if tarball_shas.get(image_name) == engine_info.sha256 and image_exists(image_name):
         print ('Found Docker Image for %s locally\n' % (image_name))
         return
 
-    payload = {
-        **auth_data,
-        'engine_id' : engine_json['engine_id']
-    }
+    req = PullImageRequest(
+        worker_id = auth_data['worker_id'],
+        secret    = auth_data['secret'],
+        engine_id = engine_info.engine_id,
+    )
 
     print ('Preparing Docker Image for %s...' % (image_name))
-    resp = requests.post(url_join(args.server, 'client/pull_image/'), data=payload, stream=True)
+    resp = requests.post(url_join(args.server, 'client/pull_image/'), json=req.model_dump(), stream=True)
 
     if resp.headers.get('Content-Type', '').startswith('application/json'):
         raise OpenRankGeneralRequestError(resp.json()['error'])
@@ -129,11 +144,11 @@ def client_pull_image(args, auth_data, engine_json, tarball_shas):
 
         # Compare against the expected sha256 from the server
         compressed_sha = sha256_for_file(pathlib.Path(zst_tmp.name))
-        print('... Expected SHA256: %s' % (engine_json['sha256']))
+        print('... Expected SHA256: %s' % (engine_info.sha256))
         print('... Compressed SHA256: %s' % (compressed_sha))
         zst_tmp.seek(0) # Go back to the start of the file for reading
 
-        if engine_json['sha256'] != compressed_sha:
+        if engine_info.sha256 != compressed_sha:
             raise OpenRankCorruptedTarballError('Corrupted download for %s' % (image_name))
 
         with tempfile.NamedTemporaryFile(suffix='.tar') as tmp_tar:
@@ -152,26 +167,27 @@ def client_pull_image(args, auth_data, engine_json, tarball_shas):
         raise OpenRankFailedDockerLoadError('Could not load %s' % (image_name))
 
     # Save the tarball sha long term to check against on each workload
-    tarball_shas[image_name] = engine_json['sha256']
+    tarball_shas[image_name] = engine_info.sha256
     with open('tarballs.info', 'w') as fout:
         fout.write(json.dumps(tarball_shas))
 
-def client_pull_book(args, auth_data, book_json):
+def client_pull_book(args, auth_data, book_info):
 
-    book_name = book_json['name']
+    book_name = book_info.name
     book_path = pathlib.Path(__file__).resolve().parent / 'books' / book_name
 
     if os.path.exists(book_path):
         print ('Found %s locally\n' % (book_name))
         return
 
-    payload = {
-        **auth_data,
-        'rating_list_id' : book_json['rating_list_id']
-    }
+    req = PullBookRequest(
+        worker_id      = auth_data['worker_id'],
+        secret         = auth_data['secret'],
+        rating_list_id = book_info.rating_list_id,
+    )
 
     print ('Downloading Book Archive for %s...' % (book_name))
-    resp = requests.post(url_join(args.server, 'client/pull_book/'), data=payload, stream=True)
+    resp = requests.post(url_join(args.server, 'client/pull_book/'), json=req.model_dump(), stream=True)
 
     if resp.headers.get('Content-Type', '').startswith('application/json'):
         raise OpenRankGeneralRequestError(resp.json()['error'])
@@ -184,11 +200,11 @@ def client_pull_book(args, auth_data, book_json):
         zst_tmp.flush()
 
         compressed_sha = sha256_for_file(pathlib.Path(zst_tmp.name))
-        print('... Expected SHA256: %s' % (book_json['sha256']))
+        print('... Expected SHA256: %s' % (book_info.sha256))
         print('... Compressed SHA256: %s' % (compressed_sha))
         zst_tmp.seek(0) # Go back to the start of the file for reading
 
-        if book_json['sha256'] != compressed_sha:
+        if book_info.sha256 != compressed_sha:
             raise OpenRankCorruptedBookError('Corrupted download for %s' % (book_name))
 
         with book_path.open('wb') as book_file:
@@ -212,11 +228,10 @@ if __name__ == '__main__':
     auth_data    = client_connect(args, hwinfo) # All requests will contain auth_data
     tarball_shas = load_tarball_shas()          # Record of SHAs for all loaded tarballs
 
-    # Could be { 'warning' : ... }
-    workload = client_request_work(args, auth_data)
+    if not (workload := client_request_work(args, auth_data)):
+        print('No work available')
+        exit()
 
-    print (workload)
-
-    client_pull_image(args, auth_data, workload['engine_a'], tarball_shas)
-    client_pull_image(args, auth_data, workload['engine_b'], tarball_shas)
-    client_pull_book (args, auth_data, workload['book'    ])
+    client_pull_image(args, auth_data, workload.engine_a, tarball_shas)
+    client_pull_image(args, auth_data, workload.engine_b, tarball_shas)
+    client_pull_book (args, auth_data, workload.book)
