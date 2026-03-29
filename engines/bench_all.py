@@ -14,9 +14,9 @@ from bench_engine import bench_engine
 if __name__ == '__main__':
 
     p = argparse.ArgumentParser()
-    p.add_argument('--seconds' , type=int, default=10)
-    p.add_argument('--threads' , type=int, default=1)
-    p.add_argument('--regex'   , type=str, default=None)
+    p.add_argument('--seconds', type=int, default=10)
+    p.add_argument('--threads', type=int, default=1)
+    p.add_argument('--regex'  , type=str, default=None)
     args = p.parse_args()
 
     for name in sorted(os.listdir('tarballs')):
@@ -25,6 +25,9 @@ if __name__ == '__main__':
         if args.regex and not re.match(args.regex, image_name):
             continue
 
-        values = bench_engine(image_name, args.seconds, args.threads, args.seconds * 2)
-        avg    = sum(values) / len(values)
-        print ('%-40s %8d' % (image_name, avg))
+        nps_values, endtimes = bench_engine(image_name, args.seconds, args.threads, args.seconds * 3)
+
+        avg_nps    = sum(nps_values) / len(nps_values)
+        max_spread = 100.0 * (max(nps_values) - min(nps_values)) / avg_nps
+        max_delta  = (max(endtimes) - min(endtimes))
+        print ('%-40s %8d nps %5.2f%% %.3fs' % (image_name, avg_nps, max_spread, max_delta))

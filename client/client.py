@@ -40,7 +40,7 @@ def load_tarball_shas():
 
 def parse_arguments():
 
-    # We can use ENV variables for the Username, Passwords, and Servers
+    # We can use ENV variables for the Username, Password, and Server
     req_user   = 'OPENRANK_USERNAME' not in os.environ
     req_pass   = 'OPENRANK_PASSWORD' not in os.environ
     req_server = 'OPENRANK_SERVER'   not in os.environ
@@ -117,9 +117,10 @@ def client_request_work(args, auth_data):
 def client_pull_image(args, auth_data, engine_info, tarball_shas):
 
     image_name = engine_info.image
+    print ('Preparing Docker Image for %s...' % (image_name))
 
     if tarball_shas.get(image_name) == engine_info.sha256 and image_exists(image_name):
-        print ('Found Docker Image for %s locally\n' % (image_name))
+        print ('... Found Docker Image for %s locally\n' % (image_name))
         return
 
     req = PullImageRequest(
@@ -128,7 +129,6 @@ def client_pull_image(args, auth_data, engine_info, tarball_shas):
         engine_id = engine_info.engine_id,
     )
 
-    print ('Preparing Docker Image for %s...' % (image_name))
     resp = requests.post(url_join(args.server, 'client/pull_image/'), json=req.model_dump(), stream=True)
 
     if resp.headers.get('Content-Type', '').startswith('application/json'):
@@ -160,7 +160,7 @@ def client_pull_image(args, auth_data, engine_info, tarball_shas):
             tmp_tar.flush()
 
             # Finally, load the file into docker from the .tar
-            print ('... Loading Docker Image from %s.tar' % (image_name))
+            print ('... Loading Docker Image from %s.tar\n' % (image_name))
             subprocess.run(['docker', 'load', '-i', tmp_tar.name], capture_output=True, text=True)
 
     if not image_exists(image_name):
@@ -169,15 +169,16 @@ def client_pull_image(args, auth_data, engine_info, tarball_shas):
     # Save the tarball sha long term to check against on each workload
     tarball_shas[image_name] = engine_info.sha256
     with open('tarballs.info', 'w') as fout:
-        fout.write(json.dumps(tarball_shas))
+        fout.write(json.dumps(tarball_shas, indent=4))
 
 def client_pull_book(args, auth_data, book_info):
 
     book_name = book_info.name
     book_path = pathlib.Path(__file__).resolve().parent / 'books' / book_name
+    print ('Looking for Book at %s' % (book_path))
 
     if os.path.exists(book_path):
-        print ('Found %s locally\n' % (book_name))
+        print ('... Found %s locally\n' % (book_name))
         return
 
     req = PullBookRequest(
@@ -208,7 +209,7 @@ def client_pull_book(args, auth_data, book_info):
             raise OpenRankCorruptedBookError('Corrupted download for %s' % (book_name))
 
         with book_path.open('wb') as book_file:
-            print('... Decompressing to %s' % (book_name))
+            print('... Decompressing to %s\n' % (book_name))
             with zstd.ZstdDecompressor().stream_reader(zst_tmp) as reader:
                 for chunk in iter(lambda: reader.read(1024 * 1024), b''):
                     book_file.write(chunk)
