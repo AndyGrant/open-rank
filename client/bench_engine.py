@@ -7,6 +7,8 @@ import re
 import subprocess
 import time
 
+from exceptions import OpenRankBenchingFailed
+
 def run_engine(image_name, seconds, outqueue, ready_event):
 
     proc = subprocess.Popen(
@@ -43,7 +45,7 @@ def run_engine(image_name, seconds, outqueue, ready_event):
 
     outqueue.put({ 'nps' : nps, 'time' : time.time() })
 
-def bench_engine(image_name, seconds, threads, max_time, ready_delay=5):
+def bench_engine(image_name, threads, seconds, max_time, ready_delay=5):
 
     outqueue = multiprocessing.Queue()
     ready_event = multiprocessing.Event()
@@ -82,7 +84,7 @@ def bench_engine(image_name, seconds, threads, max_time, ready_delay=5):
             print ('Killing container %s for %s' % (container_id, image_name))
             subprocess.run(['docker', 'kill', container_id], capture_output=True, check=False)
 
-        raise Exception('Benchmark exceeded max_time of %d seconds for %s' % (max_time, image_name))
+        raise OpenRankBenchingFailed('Benchmark exceeded max_time of %d seconds for %s' % (max_time, image_name))
 
     finally: # Terminate any still-running processes and join to avoid zombies
         for process in processes:

@@ -6,6 +6,7 @@ import io
 import json
 import os
 import pathlib
+import psutil
 import requests
 import subprocess
 import tarfile
@@ -13,8 +14,13 @@ import tempfile
 import zstandard as zstd
 
 from exceptions import *
+from bench_engine import bench_engine
 from hardware import HardwareConfig
 from schemas import *
+
+OPENRANK_BENCH_TIME_SECONDS   = 10
+OPENRANK_BENCH_TIME_THRESHOLD = 30
+OPENRANK_BENCH_TIME_DELAY     = 5
 
 def url_join(*parts):
     return '/'.join(p.strip('/') for p in parts if p) + '/'
@@ -59,14 +65,44 @@ def parse_arguments():
     p.add_argument('-U', '--username', help=help_user  , required=req_user  )
     p.add_argument('-P', '--password', help=help_pass  , required=req_pass  )
     p.add_argument('-S', '--server'  , help=help_server, required=req_server)
+    p.add_argument('-T', '--threads' , help='Default: nthreads - 1')
 
     # Replace with ENV variables if needed
     args, unknown = p.parse_known_args()
     args.username = args.username if args.username else os.environ['OPENRANK_USERNAME']
     args.password = args.password if args.password else os.environ['OPENRANK_PASSWORD']
     args.server   = args.server   if args.server   else os.environ['OPENRANK_SERVER'  ]
+    args.threads  = args.threads  if args.threads  else max(1, psutil.cpu_count(logical=False) - 1)
 
     return args
+
+
+def determine_scale_factor(args, auth_data, engine):
+
+    print ('Running benchmark for %s on %d threads' % (engine.image, args.threads))
+
+    try:
+        nps_values, endtimes = bench_engine(
+            engine.image,
+            args.threads,
+            OPENRANK_BENCH_TIME_SECONDS,
+            OPENRANK_BENCH_TIME_THRESHOLD,
+            OPENRANK_BENCH_TIME_DELAY
+        )
+    except OpenRankBenchingFailed as error:
+        raise error
+
+    avg_nps    = sum(nps_values) / len(nps_values)
+    factor     = avg_nps / engine.nps
+    max_delta  = max(endtimes) - min(endtimes)
+    nps_spread = max(nps_values) - min(nps_values)
+
+    print ('... NPS from server is %d' % (engine.nps))
+    print ('... NPS from local run is %d' % (avg_nps))
+    print ('... Relative factor for this machine is %.2f' % (factor))
+    print ('... Max time spread of %.3fs, nps spread of %d\n' % (max_delta, nps_spread))
+
+    return factor
 
 
 def client_connect(args, hwinfo):
@@ -236,3 +272,7 @@ if __name__ == '__main__':
     client_pull_image(args, auth_data, workload.engine_a, tarball_shas)
     client_pull_image(args, auth_data, workload.engine_b, tarball_shas)
     client_pull_book (args, auth_data, workload.book)
+
+    scale_a = determine_scale_factor(args, auth_data, workload.engine_a)
+    scale_b = determine_scale_factor(args, auth_data, workload.engine_b)
+    scale   = (scale_a + scale_b) / 2

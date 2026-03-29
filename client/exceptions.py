@@ -16,3 +16,6 @@ class OpenRankCorruptedTarballError(Exception):
 
 class OpenRankCorruptedBookError(Exception):
     pass
+
+class OpenRankBenchingFailed(Exception):
+    pass
