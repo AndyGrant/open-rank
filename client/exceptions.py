@@ -11,6 +11,9 @@ class OpenRankFailedDockerLoadError(Exception):
 class OpenRankAuthenticationError(Exception):
     pass
 
+class OpenRankMismatchedFastchessError(Exception):
+    pass
+
 class OpenRankCorruptedTarballError(Exception):
     pass
 

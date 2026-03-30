@@ -22,6 +22,10 @@ class PullBookRequest(BaseModel):
     secret         : str
     rating_list_id : int
 
+class PullFastchessRequest(BaseModel):
+    worker_id : int
+    secret    : str
+
 # ============================================================================
 # Response Schemas
 # ============================================================================
@@ -56,7 +60,8 @@ class EngineInfo(BaseModel):
     sha256    : str
 
 class WorkloadResponse(BaseModel):
-    config   : WorkloadConfig
-    book     : BookInfo
-    engine_a : EngineInfo
-    engine_b : EngineInfo
+    config            : WorkloadConfig
+    book              : BookInfo
+    engine_a          : EngineInfo
+    engine_b          : EngineInfo
+    fastchess_version : str

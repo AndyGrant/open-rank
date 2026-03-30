@@ -38,11 +38,23 @@ def sha256_for_file(file_path):
             sha256.update(chunk)
     return sha256.hexdigest()
 
+def get_fastchess_version(fastchess_path):
+    try:
+        return subprocess.run(
+            [str(fastchess_path), '--version'],
+            capture_output=True,
+            text=True,
+            check=True
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
 def load_tarball_shas():
     if os.path.exists('tarballs.info'):
         with open('tarballs.info') as fin:
             return json.loads(fin.read())
     return {}
+
 
 def parse_arguments():
 
@@ -75,7 +87,6 @@ def parse_arguments():
     args.threads  = args.threads  if args.threads  else max(1, psutil.cpu_count(logical=False) - 1)
 
     return args
-
 
 def determine_scale_factor(args, auth_data, engine):
 
@@ -150,10 +161,51 @@ def client_request_work(args, auth_data):
 
     return WorkloadResponse.model_validate(resp)
 
+def client_pull_fastchess(args, auth_data, expected_ver):
+
+    fastchess_path = pathlib.Path(__file__).resolve().parent / 'fastchess'
+    print ('Preparing Fastchess executable')
+
+    # Check if fastchess exists and get its version
+    current_ver = get_fastchess_version(fastchess_path)
+    if current_ver:
+        print ('... Found local fastchess version: %s' % (current_ver))
+
+    # If version matches, we're good
+    if current_ver == expected_ver:
+        print ('... Version matches expected: %s\n' % (expected_ver))
+        return
+
+    # Need to download fastchess
+    print ('... Downloading expected version: %s' % (expected_ver))
+
+    req = PullFastchessRequest(
+        worker_id = auth_data['worker_id'],
+        secret    = auth_data['secret'],
+    )
+
+    resp = requests.post(url_join(args.server, 'client/pull_fastchess/'), json=req.model_dump(), stream=True)
+
+    if resp.headers.get('Content-Type', '').startswith('application/json'):
+        raise OpenRankGeneralRequestError(resp.json()['error'])
+
+    with open(fastchess_path, 'wb') as f:
+        for chunk in iter(lambda: resp.raw.read(1024 * 1024), b''):
+            f.write(chunk)
+
+    os.chmod(fastchess_path, 0o755)
+
+    # Verify the version
+    downloaded_ver = get_fastchess_version(fastchess_path)
+    print ('... Downloaded version: %s\n' % (downloaded_ver))
+
+    if downloaded_ver != expected_ver:
+        raise OpenRankMismatchedFastchessError()
+
 def client_pull_image(args, auth_data, engine_info, tarball_shas):
 
     image_name = engine_info.image
-    print ('Preparing Docker Image for %s...' % (image_name))
+    print ('Preparing Docker Image for %s' % (image_name))
 
     if tarball_shas.get(image_name) == engine_info.sha256 and image_exists(image_name):
         print ('... Found Docker Image for %s locally\n' % (image_name))
@@ -269,9 +321,10 @@ if __name__ == '__main__':
         print('No work available')
         exit()
 
+    client_pull_fastchess(args, auth_data, workload.fastchess_version)
     client_pull_image(args, auth_data, workload.engine_a, tarball_shas)
     client_pull_image(args, auth_data, workload.engine_b, tarball_shas)
-    client_pull_book (args, auth_data, workload.book)
+    client_pull_book(args, auth_data, workload.book)
 
     scale_a = determine_scale_factor(args, auth_data, workload.engine_a)
     scale_b = determine_scale_factor(args, auth_data, workload.engine_b)

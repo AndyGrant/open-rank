@@ -7,4 +7,5 @@ books/artifacts/
 client/books/
 client/tarballs.info
 client/worker.info
+client/fastchess
 fastchess/artifacts/

@@ -17,6 +17,7 @@ from client.schemas import *
 
 from .models import *
 from .forms import *
+from .fastchess_ver import FASTCHESS_VERSION
 
 # HELPERS
 
@@ -272,12 +273,20 @@ def client_request_work(request, worker, body):
             engine_id = pairing.engine_b.id,
             sha256    = pairing.engine_b.tarball_sha,
         ),
+        fastchess_version = FASTCHESS_VERSION,
     )
 
     # Kick book_index as a pseudo priority mechanism
     Pairing.objects.filter(pk=pairing.pk).update(book_index=F('book_index') + workload.config.games)
 
     return json_response(workload)
+
+@csrf_exempt
+@require_POST
+@client_auth # Source of the worker and body arguments
+def client_pull_fastchess(request, worker, body):
+    path = settings.FASTCHESS_ARTIFACT_DIR / 'fastchess'
+    return FileResponse(open(path, 'rb'), as_attachment=True, filename='fastchess')
 
 @csrf_exempt
 @require_POST
