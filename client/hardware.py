@@ -34,7 +34,7 @@ class HardwareConfig:
         self.numa_nodes, self.numa_maps = self.get_numa_core_mapping()
 
         # Track znver1/znver2 which have failing PEXT support
-        self.cxx_compiler, is_znver1, is_znver2 = self.detect_old_zen_versions()
+        is_znver1, is_znver2 = self.detect_old_zen_versions()
 
         self.validate_hardware(is_znver1, is_znver2)
 
@@ -63,7 +63,7 @@ class HardwareConfig:
                 cmd    = [cxx, '-march=native', '-dM', '-E', '-']
                 proc   = subprocess.run(cmd, input=b'', stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 macros = proc.stdout.decode('ascii', errors='ignore')
-                return cxx, '__znver1' in macros, '__znver2' in macros
+                return '__znver1' in macros, '__znver2' in macros
             except: pass
         return None, None, None
 
