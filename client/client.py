@@ -2,14 +2,12 @@
 
 import argparse
 import hashlib
-import io
 import json
 import os
 import pathlib
 import psutil
 import requests
 import subprocess
-import tarfile
 import tempfile
 import zstandard as zstd
 
