@@ -22,7 +22,7 @@ if __name__ == '__main__':
     for name in sorted(os.listdir('tarballs')):
 
         image_name = name.removesuffix('.tar.zst')
-        if args.regex and not re.match(args.regex, image_name):
+        if args.regex and not re.search(args.regex, image_name):
             continue
 
         nps_values, endtimes = bench_engine(image_name, args.threads, args.seconds, args.seconds * 3)

@@ -3,10 +3,10 @@ FROM ubuntu:24.04 AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y curl git clang llvm lld build-essential libssl-dev wget && \
+    apt-get install -y curl git clang llvm lld build-essential libssl-dev zlib1g-dev wget && \
     rm -rf /var/lib/apt/lists/*
 
-RUN curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y && \
+RUN curl https://nim-lang.org/choosenim/init.sh -sSf | CHOOSENIM_CHOOSE_VERSION=2.2.6 sh -s -- -y && \
     ln -s ~/.nimble/bin/nim /usr/local/bin/nim && \
     ln -s ~/.nimble/bin/nimble /usr/local/bin/nimble
 
