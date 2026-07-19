@@ -55,7 +55,7 @@ class HardwareConfig:
             }
             return len(numa_map), numa_map
         except Exception as error:
-            return None, None
+            return 1, None
 
     def detect_old_zen_versions(self):
         for cxx in ['g++', 'clang++']:
@@ -65,7 +65,7 @@ class HardwareConfig:
                 macros = proc.stdout.decode('ascii', errors='ignore')
                 return '__znver1' in macros, '__znver2' in macros
             except: pass
-        return None, None, None
+        return None, None
 
     def validate_hardware(self, is_znver1, is_znver2):
 
@@ -89,6 +89,15 @@ class HardwareConfig:
 
         if self.logical_cores != 2 * self.physical_cores:
             raise OpenRankHardwareReqError('open-rank suspects this is a P+E system, where threads != cores')
+
+    def dump(self):
+        fields = [
+            'cpu_name', 'arch', 'os_name', 'os_ver', 'python_ver',
+            'logical_cores', 'physical_cores', 'ram_total_mb', 'numa_nodes',
+        ]
+        width = max(len(f) for f in fields)
+        for field in fields:
+            print('%-*s  %s' % (width, field, getattr(self, field)))
 
 if __name__ == '__main__':
     for key, value in vars(HardwareConfig()).items():
