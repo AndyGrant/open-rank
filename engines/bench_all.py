@@ -25,9 +25,10 @@ if __name__ == '__main__':
         if args.regex and not re.search(args.regex, image_name):
             continue
 
-        nps_values, endtimes = bench_engine(image_name, args.threads, args.seconds, args.seconds * 3)
+        nps_values, endtimes, peak_kb = bench_engine(image_name, args.threads, args.seconds, args.seconds * 3)
 
         avg_nps    = sum(nps_values) / len(nps_values)
         max_spread = 100.0 * (max(nps_values) - min(nps_values)) / avg_nps
         max_delta  = (max(endtimes) - min(endtimes))
-        print ('%-40s %8d nps %5.2f%% %.3fs' % (image_name, avg_nps, max_spread, max_delta))
+        peak_mb    = peak_kb / 1024
+        print ('%-40s %8d nps %5.2f%% %.3fs %8.1f MB' % (image_name, avg_nps, max_spread, max_delta, peak_mb))
